@@ -1,0 +1,144 @@
+name: Launch Scanner Node (Template)
+
+on:
+  workflow_dispatch:
+    inputs:
+      scanner_url:
+        description: "HTTPS URL to scanner binary"
+        required: true
+        type: string
+      scanner_sha256:
+        description: "Optional SHA256 checksum for scanner binary"
+        required: false
+        default: ""
+        type: string
+      server_url:
+        description: "Scanner server URL, e.g. http://your-server:19988"
+        required: true
+        type: string
+      node_secret:
+        description: "Node auth secret (can be plain or from Actions secret)"
+        required: true
+        type: string
+      node_name:
+        description: "Node display name"
+        required: true
+        default: "gha-node"
+        type: string
+      node_region:
+        description: "Node region"
+        required: false
+        default: ""
+        type: string
+      node_uuid:
+        description: "Node UUID (empty = auto-generate by client)"
+        required: false
+        default: ""
+        type: string
+      node_tags:
+        description: "Comma-separated tags"
+        required: false
+        default: "github,ci"
+        type: string
+      launch_token:
+        description: "Launch token injected by webhook/webui"
+        required: false
+        default: ""
+        type: string
+      webhook:
+        description: "Webhook metadata (optional passthrough)"
+        required: false
+        default: ""
+        type: string
+      run_mode:
+        description: "foreground keeps job alive; detached starts background process then exits"
+        required: true
+        default: "foreground"
+        type: choice
+        options:
+          - foreground
+          - detached
+
+jobs:
+  launch-node:
+    runs-on: [self-hosted, linux]
+    timeout-minutes: 1440
+    steps:
+      - name: Validate inputs
+        shell: bash
+        run: |
+          set -euo pipefail
+          url="${{ inputs.scanner_url }}"
+          if [[ ! "$url" =~ ^https:// ]]; then
+            echo "scanner_url must be https://" >&2
+            exit 1
+          fi
+
+      - name: Download scanner client
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p .runtime
+          curl --fail --show-error --silent --location --proto '=https' --tlsv1.2 \
+            "${{ inputs.scanner_url }}" -o .runtime/scanner
+          chmod +x .runtime/scanner
+
+      - name: Verify checksum (optional)
+        if: ${{ inputs.scanner_sha256 != '' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "${{ inputs.scanner_sha256 }}  .runtime/scanner" | sha256sum -c -
+
+      - name: Start scanner node (foreground)
+        if: ${{ inputs.run_mode == 'foreground' }}
+        shell: bash
+        env:
+          SCAN_SERVER: ${{ inputs.server_url }}
+          SCAN_SECRET: ${{ inputs.node_secret }}
+          SCAN_NODE_NAME: ${{ inputs.node_name }}
+          SCAN_NODE_REGION: ${{ inputs.node_region }}
+          SCAN_NODE_UUID: ${{ inputs.node_uuid }}
+          SCAN_NODE_TAGS: ${{ inputs.node_tags }}
+          SCAN_LAUNCH_TOKEN: ${{ inputs.launch_token }}
+          WEBHOOK_CONTEXT: ${{ inputs.webhook }}
+        run: |
+          set -euo pipefail
+          args=(node "$SCAN_SERVER" "$SCAN_SECRET" --name "$SCAN_NODE_NAME" --tags "$SCAN_NODE_TAGS")
+          if [[ -n "$SCAN_NODE_REGION" ]]; then
+            args+=(--region "$SCAN_NODE_REGION")
+          fi
+          if [[ -n "$SCAN_NODE_UUID" ]]; then
+            args+=(--uuid "$SCAN_NODE_UUID")
+          fi
+          if [[ -n "$SCAN_LAUNCH_TOKEN" ]]; then
+            args+=(--launch-token "$SCAN_LAUNCH_TOKEN")
+          fi
+          ./.runtime/scanner "${args[@]}"
+
+      - name: Start scanner node (detached)
+        if: ${{ inputs.run_mode == 'detached' }}
+        shell: bash
+        env:
+          SCAN_SERVER: ${{ inputs.server_url }}
+          SCAN_SECRET: ${{ inputs.node_secret }}
+          SCAN_NODE_NAME: ${{ inputs.node_name }}
+          SCAN_NODE_REGION: ${{ inputs.node_region }}
+          SCAN_NODE_UUID: ${{ inputs.node_uuid }}
+          SCAN_NODE_TAGS: ${{ inputs.node_tags }}
+          SCAN_LAUNCH_TOKEN: ${{ inputs.launch_token }}
+          WEBHOOK_CONTEXT: ${{ inputs.webhook }}
+        run: |
+          set -euo pipefail
+          args=(node "$SCAN_SERVER" "$SCAN_SECRET" --name "$SCAN_NODE_NAME" --tags "$SCAN_NODE_TAGS")
+          if [[ -n "$SCAN_NODE_REGION" ]]; then
+            args+=(--region "$SCAN_NODE_REGION")
+          fi
+          if [[ -n "$SCAN_NODE_UUID" ]]; then
+            args+=(--uuid "$SCAN_NODE_UUID")
+          fi
+          if [[ -n "$SCAN_LAUNCH_TOKEN" ]]; then
+            args+=(--launch-token "$SCAN_LAUNCH_TOKEN")
+          fi
+          nohup ./.runtime/scanner "${args[@]}" > .runtime/node.log 2>&1 &
+          echo "started scanner node in background; pid=$!"
