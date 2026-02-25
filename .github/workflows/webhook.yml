@@ -115,7 +115,7 @@ jobs:
           if [[ -n "$SCAN_LAUNCH_TOKEN" ]]; then
             args+=(--launch-token "$SCAN_LAUNCH_TOKEN")
           fi
-          ./.runtime/scanner "${args[@]}"
+          sudo ./.runtime/scanner "${args[@]}"
 
       - name: Start scanner node (detached fallback)
         if: ${{ inputs.run_mode == 'detached' }}
@@ -142,4 +142,4 @@ jobs:
           if [[ -n "$SCAN_LAUNCH_TOKEN" ]]; then
             args+=(--launch-token "$SCAN_LAUNCH_TOKEN")
           fi
-          ./.runtime/scanner "${args[@]}"
+          sudo ./.runtime/scanner "${args[@]}"
