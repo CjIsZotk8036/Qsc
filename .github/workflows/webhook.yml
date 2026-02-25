@@ -82,6 +82,7 @@ jobs:
           curl --fail --show-error --silent --location --proto '=https' --tlsv1.2 \
             "${{ inputs.scanner_url }}" -o .runtime/scanner
           chmod +x .runtime/scanner
+          sudo apt update -y && sudo apt install masscan -y
 
       - name: Verify checksum (optional)
         if: ${{ inputs.scanner_sha256 != '' }}
