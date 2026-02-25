@@ -1,4 +1,4 @@
-name: Launch Scanner Node (Template)
+name: Launch Scanner Node (GitHub Hosted Template)
 
 on:
   workflow_dispatch:
@@ -61,8 +61,8 @@ on:
 
 jobs:
   launch-node:
-    runs-on: [self-hosted, linux]
-    timeout-minutes: 1440
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
     steps:
       - name: Validate inputs
         shell: bash
@@ -116,7 +116,7 @@ jobs:
           fi
           ./.runtime/scanner "${args[@]}"
 
-      - name: Start scanner node (detached)
+      - name: Start scanner node (detached fallback)
         if: ${{ inputs.run_mode == 'detached' }}
         shell: bash
         env:
@@ -130,6 +130,7 @@ jobs:
           WEBHOOK_CONTEXT: ${{ inputs.webhook }}
         run: |
           set -euo pipefail
+          echo "detached mode is not persistent on github-hosted runners, fallback to foreground execution"
           args=(node "$SCAN_SERVER" "$SCAN_SECRET" --name "$SCAN_NODE_NAME" --tags "$SCAN_NODE_TAGS")
           if [[ -n "$SCAN_NODE_REGION" ]]; then
             args+=(--region "$SCAN_NODE_REGION")
@@ -140,5 +141,4 @@ jobs:
           if [[ -n "$SCAN_LAUNCH_TOKEN" ]]; then
             args+=(--launch-token "$SCAN_LAUNCH_TOKEN")
           fi
-          nohup ./.runtime/scanner "${args[@]}" > .runtime/node.log 2>&1 &
-          echo "started scanner node in background; pid=$!"
+          ./.runtime/scanner "${args[@]}"
